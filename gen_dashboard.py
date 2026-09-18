@@ -4,6 +4,8 @@ with open("results/benchmark_chart.png", "rb") as f:
     chart1 = base64.b64encode(f.read()).decode()
 with open("results/isolated_chart.png", "rb") as f:
     chart2 = base64.b64encode(f.read()).decode()
+with open("results/cost_model_accuracy.png", "rb") as f:
+    chart3 = base64.b64encode(f.read()).decode()
 
 html = """<!DOCTYPE html>
 <html>
@@ -69,13 +71,13 @@ footer { margin-top: 64px; color: var(--muted); font-size: 0.85rem; border-top: 
   <div class="stat"><div class="num">1.19e-6</div><div class="label">diff vs real torch.nn.TransformerEncoderLayer</div></div>
   <div class="stat"><div class="num">3.4x</div><div class="label">peak fusion speedup (isolated Add+ReLU)</div></div>
   <div class="stat"><div class="num">99.3%</div><div class="label">within torch.compile at 4096x4096</div></div>
-  <div class="stat"><div class="num">88%</div><div class="label">learned cost model, held-out sequences</div></div>
+  <div class="stat"><div class="num">100%</div><div class="label">learned cost model, held-out sequences (v2, fixed)</div></div>
   <div class="stat"><div class="num">100%</div><div class="label">CNN accuracy preserved end-to-end</div></div>
   <div class="stat"><div class="num">1000</div><div class="label">graphs fuzz-tested per suite, 0 failures</div></div>
 </div>
 
 <h2>What this is</h2>
-<p>A small but real compiler stack for tensor programs: a graph IR, an operator-fusion pass, two codegen backends (portable C, hand-written AVX-512), a real autotuning search that verifies every candidate before trusting it, a calibrated <em>and</em> a learned cost model, a real ONNX frontend validated against onnxruntime, a real PyTorch comparison, a transformer FFN block with fused LayerNorm, fused multi-head attention, a fused backward kernel, a Go service for sharing tuning results across processes, and a random-graph fuzzer that stress-tests correctness far beyond hand-picked test cases.</p>
+<p>A small but real compiler stack for tensor programs: a graph IR, an operator-fusion pass, two codegen backends (portable C, hand-written AVX-512), a real autotuning search that verifies every candidate before trusting it, a calibrated <em>and</em> a learned cost model, a real ONNX frontend validated against onnxruntime, a real PyTorch comparison, a transformer FFN block with fused LayerNorm, fused multi-head attention, a fused backward kernel, a Go service for sharing tuning results across processes, and a random-graph fuzzer that stress-tests correctness far beyond hand-picked test cases, subgraph fusion for diamond patterns like Sigmoid(h)*Tanh(h), row-broadcast Conv+bias+ReLU fusion, and a general reverse-mode autodiff engine for arbitrary fused chains.</p>
 
 <h2>Fusion pass, before &amp; after</h2>
 <p>The fusion pass fuses maximal elementwise chains — <em>and correctly refuses to fuse across fan-out/fan-in</em> (e.g. a value read by two branches, like a gated activation). This is the actual before/after on a real imported model layer:</p>
@@ -140,6 +142,21 @@ footer { margin-top: 64px; color: var(--muted); font-size: 0.85rem; border-top: 
 <tr><td>16384x1024</td><td>65.76ms</td><td>92.13ms (0.71x)</td><td><strong>22.75ms (2.89x)</strong></td><td>38.36ms (<strong>slower than ours</strong>)</td></tr>
 </table>
 <p>At the full encoder-layer level this project still runs ~1.6&ndash;2.4x behind PyTorch eager mode; with the kernel now fast, that gap traces cleanly to Python-level orchestration overhead (reshapes, multiple numpy calls for head-splitting), not kernel quality — a real, identified next target, not a mystery.</p>
+
+
+<h2>A cost model that got WORSE before it got better</h2>
+<p>The first fix for a known misprediction (a binary transcendental flag couldn't tell <code>Tanh</code> from <code>Sigmoid</code>) made accuracy <strong>worse</strong>, not better &mdash; 56% instead of 88%. The reason was a real ML lesson: holding out the only <code>Tanh</code>-containing sequence meant the model had <em>zero</em> training signal for that feature, so its learned weight was exactly <code>0.000</code>. No amount of extra parameters fixes a feature the model never sees vary. The actual fix was adding genuine Tanh signal from other sequences &mdash; not more features, more <em>data</em>:</p>
+<img src="data:image/png;base64,__CHART3__">
+
+<h2>Five more additions, one honestly reverted</h2>
+<p><strong>Subgraph fusion:</strong> <code>Sigmoid(h)*Tanh(h)</code> &mdash; the exact diamond pattern documented as excluded for correctness reasons &mdash; is now genuinely fused into one kernel, verified on the graph that originally motivated the exclusion.</p>
+<p><strong>Conv+bias+ReLU row-broadcast fusion:</strong> Conv2D's bias varies per-channel, the opposite broadcast axis from every other kernel here. Verified against real <code>torch.nn.functional.conv2d</code>+<code>relu</code> (9.5e-7 diff), 4.5&ndash;9.5x faster than numpy in isolation.</p>
+<p><strong>Attention orchestration &mdash; disproven and reverted.</strong> The documented hypothesis blamed "Python orchestration overhead" for the PyTorch gap. Building the fix and measuring it in isolation proved the hypothesis wrong: numpy's reshape/transpose were already free (lazy views), and the "fusion" kernel was 100&ndash;400x <em>slower</em> for eagerly copying data that was never being copied. Reverted rather than shipped as a false win &mdash; real profiling data recorded instead, pointing at PyTorch's internal matmul fusion as the actual (still open) source.</p>
+<p><strong>General autodiff engine:</strong> reverse-mode backward for any chain of Add/Mul/Sub/Neg/ReLU/Sigmoid/Tanh/GELU, verified against real PyTorch autograd across 5 sequences. Found two more real bugs building it &mdash; a buffer overflow, then the exact same row-offset indexing mistake as bug #4. Both fixed; 5&ndash;6.9x faster than naive numpy backward.</p>
+
+<h2>Bug #9: the mirror image of bug #4, found independently by the grown fuzzer</h2>
+<p>Extending the fuzzer to cover diamond patterns and LayerNorm found a new bug almost immediately: a fusion pass written this session fused an ordinary bias-add into <code>AddLayerNorm</code> as if it were a genuine residual connection &mdash; the exact same class of mistake as bug #4, independently reintroduced in different code. Silent NaN, not a crash. Fixed the same way, then the fix revealed the fuzzer had <em>zero real coverage</em> of the mechanism the bug lived in &mdash; a dedicated grammar rule was added to guarantee it:</p>
+<pre>1000 random graphs: 217 elementwise + 843 diamond + 851 AddLayerNorm fusions, 0 failures.</pre>
 
 <h2>Stack</h2>
 <p>
@@ -207,7 +224,7 @@ footer { margin-top: 64px; color: var(--muted); font-size: 0.85rem; border-top: 
 </html>
 """
 
-html = html.replace("__CHART1__", chart1).replace("__CHART2__", chart2)
+html = html.replace("__CHART1__", chart1).replace("__CHART2__", chart2).replace("__CHART3__", chart3)
 
 with open("results/dashboard.html", "w") as f:
     f.write(html)

@@ -716,6 +716,8 @@ Held-out sequence accuracy: 16/16 (100%)
 has_Sigmoid: -7.958   has_Tanh: -10.600
 ```
 
+![Cost model accuracy across iterations](results/cost_model_accuracy.png)
+
 Tanh's weight is correctly more negative than Sigmoid's — learned from
 data, not asserted, and only possible once the training set actually
 contained the signal needed to learn it.
