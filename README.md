@@ -1,21 +1,63 @@
-# tensorfuse v2 — a small compiler with a real autotuning backend
+# tensorfuse
 
-v1 of this project fused one fixed pattern (bias-add + ReLU) into a
-single kernel. This version is a genuine step up in scope: **generalized
-fusion** of arbitrary elementwise chains, **two codegen backends**
-(portable scalar, and hand-written AVX-512 intrinsics), and a **real
-autotuning search** — generate every candidate, verify each one against
-a numpy reference before it's even eligible to be timed, benchmark the
-survivors, cache the winner. This is the same idea as AutoTVM/Ansor's
-tuning loop, scoped to run on a laptop in seconds instead of a cluster
-for hours.
+[![CI](https://github.com/codingaditya17/tensorfuse/actions/workflows/ci.yml/badge.svg)](https://github.com/codingaditya17/tensorfuse/actions/workflows/ci.yml)
+![Python](https://img.shields.io/badge/python-3.12-blue)
+![Go](https://img.shields.io/badge/go-1.22-00ADD8)
+![C](https://img.shields.io/badge/kernels-C%20%2B%20AVX--512-informational)
 
-Every number below is measured on this machine (1 physical core, no
-GPU, AVX-512-capable Intel Xeon, gcc 13.3, numpy 2.4) and reproducible
-by running the scripts. Nothing is cherry-picked — including the
-result where fusion *loses*.
+**A tensor compiler built from scratch** — a graph IR, an operator-fusion
+pass, two codegen backends (portable C + hand-written AVX-512), a real
+autotuning search, a calibrated and a learned cost model, a real ONNX
+frontend validated against onnxruntime, a full transformer encoder layer
+verified bit-exact against PyTorch's own `nn.TransformerEncoderLayer`, a
+fused backward kernel checked against real PyTorch autograd, a Go service
+for a shared networked tuning cache, and a random-graph correctness
+fuzzer that found a real silent-data-corruption bug in its first 20 runs.
+
+**[📊 View the live interactive dashboard](https://htmlpreview.github.io/?https://github.com/codingaditya17/tensorfuse/blob/main/results/dashboard.html)**
+— stat cards, benchmark charts, and all 8 bugs found, with what fixed
+each one.
+
+![Fusion vs unfused, isolated from matmul cost](results/isolated_chart.png)
+
+Every number in this README is measured on real hardware (1 physical
+core, no GPU, AVX-512-capable Intel Xeon, gcc 13.3, numpy 2.4,
+reproducible by running the scripts) and validated against at least one
+independent system — onnxruntime, PyTorch eager, PyTorch autograd, or
+`torch.compile`. Nothing here is cherry-picked, including the results
+where this project's own kernels lose.
+
+## At a glance
+
+| | |
+|---|---|
+| Bit-exact vs `torch.nn.TransformerEncoderLayer` | `1.19e-6` max diff |
+| Within `torch.compile` (Inductor) at scale | `0.7%` apart, 4096×4096 |
+| Peak fusion speedup, isolated | `3.4x` (Add+ReLU) |
+| Learned cost model, held-out sequences | `88%` accuracy |
+| CNN accuracy preserved end-to-end | `100%` |
+| Random graphs fuzz-tested | `1000`, 0 failures |
+| Real bugs found and fixed | `8` — 7 by targeted tests, 1 by fuzzing |
+
+
 
 ## Architecture
+
+```mermaid
+flowchart LR
+    A[Graph IR] --> B[Fusion Pass]
+    B --> C{Cost Model}
+    C -->|fuse| D[Autotuner]
+    C -->|skip| E[numpy fallback]
+    D --> F1[C backend]
+    D --> F2[AVX-512 backend]
+    D --> F3[Triton backend<br/>GPU-gated]
+    F1 & F2 & F3 --> G[Compiled Kernel]
+    G --> H[Execution]
+    H -.validated against.-> V1[onnxruntime]
+    H -.validated against.-> V2[PyTorch eager/autograd]
+    H -.validated against.-> V3[torch.compile]
+```
 
 ```
 ir.py / ir2.py          Graph IR: MatMul, Add, Mul, Sub, ReLU, Sigmoid, Tanh, Neg
@@ -48,11 +90,17 @@ ir_transformer.py        LayerNorm / AddLayerNorm fusion, single-pass reduction 
 transformer_block.py     Real transformer FFN block, validated against PyTorch
 backward_fusion.py       Fused backward kernel for Add+ReLU, verified vs torch autograd
 benchmark_transformer.py Full-block and isolated LayerNorm benchmarks
-gen_dashboard.py         Generates results/dashboard.html (published as an Artifact)
+gen_dashboard.py         Generates results/dashboard.html (a self-contained, embeddable report)
 ir_attention.py          Fused softmax kernel + scaled-dot-product attention
 encoder_layer.py         Full transformer encoder layer, verified vs torch.nn.TransformerEncoderLayer
 fuzz_test.py             Compiler correctness fuzzer: random graphs, random shapes, random branching
 ```
+
+The very first version of this project (before generalized fusion,
+autotuning, or any of the above) was a single fixed pattern —
+bias-add + ReLU fused into one kernel:
+
+![v1: fixed bias+ReLU fusion pattern, unfused vs fused](results/benchmark_chart.png)
 
 ## The fusion pass is general, not one hardcoded pattern
 
@@ -102,8 +150,7 @@ recognize.
 ## Results — isolated elementwise kernel (decoupled from matmul)
 
 `benchmark_isolated.py` times only the fused post-processing chain, so
-the numbers aren't diluted by BLAS matmul cost. See
-`results/isolated_chart.png`.
+the numbers aren't diluted by BLAS matmul cost. (Chart above.)
 
 **Simple chain (Add + ReLU)** — fusion wins clearly and by a growing
 margin, autotuning adds more on top by picking AVX-512 at larger sizes:
