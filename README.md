@@ -862,19 +862,4 @@ together, with zero failures. Conv2D/MaxPool remain out of the
 fuzzer's grammar (documented, honest scope: they need 4D spatial shape
 tracking this fuzzer's model doesn't yet support).
 
-## What I'd build next
 
-- **Understand PyTorch's internal attention fusion.** The disproven
-  orchestration hypothesis leaves the real gap open: profiling
-  PyTorch's own C++ implementation, not this project's Python side, is
-  the honest next step.
-- **Extend the fuzzer to Conv2D/MaxPool.** Needs 4D spatial shape
-  tracking the current fuzzer's model doesn't support — documented,
-  not yet built.
-- **Extend diamond fusion beyond depth-1** — deeper subgraphs, and
-  n-ary merges beyond two branches.
-- **Verify the Triton backend on real GPU hardware** and extend it
-  beyond the single Add+ReLU pattern.
-- **Multi-node autotuning**: have the Go service dispatch measurement
-  jobs to a fleet of machines instead of just storing results, closer
-  to how Ansor's real distributed measurement works.
