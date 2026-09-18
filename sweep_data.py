@@ -25,6 +25,12 @@ SEQUENCES = {
     "Sub-ReLU": [("Sub", "bias"), ("ReLU", None)],
     "Add-Neg-ReLU": [("Add", "bias"), ("Neg", None), ("ReLU", None)],
     "Add-ReLU-Mul": [("Add", "bias"), ("ReLU", None), ("Mul", "scale")],
+    # Added so the learned cost model has genuine Tanh training signal
+    # from sequences OTHER than the one held out for evaluation --
+    # without this, "has_Tanh" never varies in training and the model
+    # can't learn anything about it at all (see learned_cost_model_v2.py).
+    "Tanh-ReLU": [("Tanh", None), ("ReLU", None)],
+    "Add-Tanh-Mul": [("Add", "bias"), ("Tanh", None), ("Mul", "scale")],
 }
 
 SHAPES = [(64, 64), (256, 256), (1024, 256), (1024, 1024),

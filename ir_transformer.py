@@ -59,9 +59,21 @@ def fuse_add_layernorm(graph: Graph):
             continue
         x_name, gamma, beta = op.inputs
         add_op = by_name.get(x_name)
-        if (add_op is not None and add_op.kind == "Add"
-                and uses.get(x_name, 0) == 1):
+        if add_op is not None and add_op.kind == "Add" and uses.get(x_name, 0) == 1:
             a, b = add_op.inputs
+            # AddLayerNorm's kernel assumes BOTH operands are full
+            # (rows, cols) tensors (a genuine residual connection) --
+            # NOT that one might be a (cols,) broadcast bias vector.
+            # An ordinary MLP-style Add(x, bias) has exactly that shape
+            # (a Param, not a full tensor), and fusing it here would
+            # make the kernel read past the end of the small bias array
+            # for every row past the first -- this is the exact mirror
+            # of bug #4 (a residual read as a broadcast bias), found
+            # independently by fuzz_test_v2.py in THIS fusion pass. Only
+            # fuse when the second operand is NOT a Param.
+            b_op = by_name.get(b)
+            if b_op is not None and b_op.kind == "Param":
+                continue  # ordinary bias-add, not a residual -- don't fuse
             replace_layernorm_with[op.name] = Op(
                 op.name, "AddLayerNorm", [a, b, gamma, beta], op.meta
             )

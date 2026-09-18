@@ -64,7 +64,7 @@ footer { margin-top: 64px; color: var(--muted); font-size: 0.85rem; border-top: 
   <div class="stat"><div class="num">99.3%</div><div class="label">within torch.compile at 4096x4096</div></div>
   <div class="stat"><div class="num">88%</div><div class="label">learned cost model, held-out sequences</div></div>
   <div class="stat"><div class="num">100%</div><div class="label">CNN accuracy preserved end-to-end</div></div>
-  <div class="stat"><div class="num">1000</div><div class="label">random graphs fuzz-tested, 0 failures</div></div>
+  <div class="stat"><div class="num">1000</div><div class="label">graphs fuzz-tested per suite, 0 failures</div></div>
 </div>
 
 <h2>What this is</h2>
@@ -145,7 +145,7 @@ footer { margin-top: 64px; color: var(--muted); font-size: 0.85rem; border-top: 
 <span class="pill">Triton (GPU backend, gated by CUDA availability)</span>
 </p>
 
-<h2>All eight real bugs, caught by testing before they shipped</h2>
+<h2>All nine real bugs, caught by testing before they shipped</h2>
 
 <div class="bug">
   <div class="title">1. Fan-in through a computed activation</div>
@@ -186,6 +186,11 @@ footer { margin-top: 64px; color: var(--muted); font-size: 0.85rem; border-top: 
   <div class="title">8. Silent data corruption via in-place buffer aliasing &mdash; found by fuzzing, not by hand</div>
   A compiled kernel mutated its input buffer in place for performance. A shared Input feeding both a fusible chain and a later, separate MatMul got silently corrupted — no error, just a wrong number. The only bug of the eight that would have shipped silently; a random-graph fuzzer (the same technique as Csmith/NNSmith) found it in the first 20 generated cases.
   <div class="fix">Fixed by tracking root-exclusivity from use-counts already computed during fusion (zero extra cost) instead of always copying defensively — verified clean across 1000 random graphs with zero performance regression on any existing benchmark.</div>
+</div>
+<div class="bug">
+  <div class="title">9. A residual-add mistaken for a bias-add &mdash; the mirror image of bug #4, found independently in a different fusion pass</div>
+  A new pass, <code>fuse_add_layernorm</code>, fused <code>Add(x, bias)</code> into <code>AddLayerNorm</code> whenever an Add fed a LayerNorm, without checking whether the second operand was a genuine full-tensor residual or an ordinary (cols,) bias Param. The kernel assumed both operands were full (rows, cols) tensors; handed a (64,) bias for a (29, 64) input, it read past the small array for every row past the first — silent NaN, not a crash. Found by the extended fuzzer, which also revealed the fuzzer had zero actual coverage of this fusion path until a dedicated grammar rule was added.
+  <div class="fix">Fixed the same way as bug #4: require the second operand to originate from something other than a Param before treating it as a broadcast-eligible residual. Verified clean across 1000 random graphs genuinely exercising all three fusion mechanisms (217 elementwise + 843 diamond + 851 AddLayerNorm fusions).</div>
 </div>
 
 <footer>tensorfuse — built as a from-scratch exploration of what an AI compiler engineer's job actually involves: graph IR, fusion, codegen, autotuning, and validating every claim against an independent system rather than trusting your own reference.</footer>

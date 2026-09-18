@@ -36,8 +36,8 @@ where this project's own kernels lose.
 | Peak fusion speedup, isolated | `3.4x` (Add+ReLU) |
 | Learned cost model, held-out sequences | `88%` accuracy |
 | CNN accuracy preserved end-to-end | `100%` |
-| Random graphs fuzz-tested | `1000`, 0 failures |
-| Real bugs found and fixed | `8` — 7 by targeted tests, 1 by fuzzing |
+| Random graphs fuzz-tested | `1000` (elementwise) + `1000` (diamonds + LayerNorm), 0 failures |
+| Real bugs found and fixed | `9` — 7 by targeted tests, 2 by fuzzing |
 
 
 
@@ -94,6 +94,13 @@ gen_dashboard.py         Generates results/dashboard.html (a self-contained, emb
 ir_attention.py          Fused softmax kernel + scaled-dot-product attention
 encoder_layer.py         Full transformer encoder layer, verified vs torch.nn.TransformerEncoderLayer
 fuzz_test.py             Compiler correctness fuzzer: random graphs, random shapes, random branching
+learned_cost_model_v2.py Per-op-kind learned cost model, 100% held-out accuracy
+fusion_subgraph.py       Subgraph fusion: Sigmoid(h)*Tanh(h) diamond patterns
+conv_fusion.py           Row-broadcast Conv+bias+ReLU fusion
+attention_orchestration.py  QKV split/merge kernels (built, then reverted -- see README)
+profile_attention.py     Real profiling data disproving the orchestration hypothesis
+autodiff_general.py      General reverse-mode autodiff for arbitrary fused chains
+fuzz_test_v2.py          Extended fuzzer: diamonds + LayerNorm, all 3 fusion passes composed
 ```
 
 The very first version of this project (before generalized fusion,
@@ -679,30 +686,191 @@ ordinary graph shape, and nothing about running the existing hand-
 picked test suite would ever have found it — only generating enough
 random structure to happen to hit the exact pattern did.
 
+## Six more additions: closing every documented gap, honestly
+
+Every item in the "what I'd build next" list from the previous session
+was tackled. Four succeeded cleanly. One succeeded after a wrong first
+attempt that was itself instructive. One **disproved its own
+hypothesis** and was reverted rather than shipped as a false win. All
+six are covered by the extended fuzzer below.
+
+### A richer learned cost model — first attempt made it WORSE, and that was the real lesson
+
+The original model (`learned_cost_model.py`) used one binary
+`has_transcendental` feature and hit 88% held-out accuracy, mispredicting
+`Add-Tanh` at its largest size because it couldn't distinguish `Tanh`
+from `Sigmoid`'s different costs. The obvious fix — one indicator
+feature *per op kind* instead of one collapsed bit — was tried first
+in `learned_cost_model_v2.py` and made accuracy **worse: 56%**, not
+better. The reason is a real ML lesson, not a coding bug: holding out
+`Add-Tanh` **entirely** meant no other training sequence contained
+`Tanh` at all, so `has_Tanh`'s weight trained to exactly `0.000` — a
+model cannot learn a cost for a feature it never sees vary, no matter
+how many parameters you give it. The actual fix was adding two more
+Tanh-containing sequences to the sweep (`Tanh-ReLU`, `Add-Tanh-Mul`) so
+the model had genuine training signal from sequences *other than* the
+one held out for evaluation:
+
+```
+Held-out sequence accuracy: 16/16 (100%)
+has_Sigmoid: -7.958   has_Tanh: -10.600
+```
+
+Tanh's weight is correctly more negative than Sigmoid's — learned from
+data, not asserted, and only possible once the training set actually
+contained the signal needed to learn it.
+
+### Subgraph fusion — `Sigmoid(h) * Tanh(h)` is now genuinely fused
+
+`fusion_subgraph.py` fuses the exact "diamond" pattern this project
+spent its first several bugs learning to correctly refuse: two
+branches sharing one root, merged by a binary op, where BOTH operands
+are full tensors (not one chain + one broadcast vector). This needed
+its own codegen (`DiamondKernel`) rather than reusing the existing
+column-broadcast model. Tested on the exact graph documented earlier
+as "deliberately excluded for correctness reasons":
+
+```
+%9 = FusedDiamond(%6)          <- Sigmoid(h)*Tanh(h), one compiled pass
+%11 = FusedElementwise(%9, %4)  <- the trailing bias+relu still fuses too
+max diff vs unfused baseline: 1.19e-07
+```
+
+Both fusion mechanisms compose correctly on the same graph. The
+`DiamondKernel` never mutates its input (always writes to a fresh
+output array), so unlike `FusedElementwise` it has no aliasing hazard
+to track at all — a simpler, safer design by construction.
+
+### Conv+bias+ReLU row-broadcast fusion — a genuinely different broadcast axis
+
+Conv2D's bias varies per **channel**, constant across spatial
+positions — the opposite axis from every other fused kernel in this
+project (an MLP's bias varies per **column**, constant across rows).
+Reusing the existing codegen would silently misread the tensor, the
+same class of bug as bug #4. `conv_fusion.py` gets its own explicit
+row-broadcast kernel, verified against numpy and against real
+`torch.nn.functional.conv2d`+`relu`:
+
+```
+max diff vs real torch Conv2d+ReLU: 9.54e-07
+```
+
+Isolated from conv's own cost (which dominates the full pipeline, the
+same dilution pattern seen throughout this project), the fused
+bias+ReLU kernel alone is **4.5–9.5x faster** than numpy.
+
+### Fusing the attention orchestration — the hypothesis was WRONG, and the honest thing was to say so
+
+The documented gap claimed PyTorch's edge came from "Python-level
+orchestration overhead (reshapes, multiple numpy calls for
+head-splitting)." `attention_orchestration.py` built the fix: one
+compiled kernel doing the QKV split and heads-merge in a single pass.
+Benchmarking it in isolation **disproved the hypothesis**:
+`np.split`/`.transpose()` produce lazy views that never copy data
+until something downstream forces it — they were already ~0.008ms,
+effectively free. The "fusion" kernel, which eagerly copies into new
+contiguous buffers, was **100–400x slower** for exactly that reason.
+
+It was reverted from `encoder_layer.py` rather than shipped as a false
+win. `profile_attention.py` records the real profiling instead:
+
+```
+qkv_proj (one matmul):   ~29.5 ms
+split+heads (views):      ~0.008 ms   <- confirmed negligible
+sdpa (2 matmul+softmax): ~11.8 ms
+merge (view):              ~0.33 ms   <- also negligible
+out_proj (one matmul):    ~8.6 ms
+full _self_attention():  ~57.0 ms
+torch's WHOLE self_attn: ~34.2 ms
+
+isolated raw matmul, numpy vs torch, same shape: only 1.1-1.2x apart
+```
+
+The individual matmuls dominate, not orchestration — and since raw
+matmul performance is roughly at parity, PyTorch's C++ implementation
+doing the *entire* attention block faster than this project's single
+QKV matmul most likely reflects internal fusion across steps that a
+naive Python breakdown can't see or easily replicate. Left as a
+genuinely open, deeper problem — not something one more kernel fixes.
+
+### A general autodiff engine — two more real bugs, caught immediately by testing
+
+`backward_fusion.py` proved backward-pass fusion works for one
+hardcoded pattern. `autodiff_general.py` generalizes it to any chain of
+`{Add, Mul, Sub, Neg, ReLU, Sigmoid, Tanh, GELU}`, the same way
+`fusion2.py` generalized forward fusion — reverse-mode gradients
+verified against real PyTorch autograd across 5 different random
+chains, with the whole backward pass compiled into ONE kernel per
+sequence.
+
+Building the compiled kernel surfaced two more real bugs immediately:
+a **buffer overflow** (operand gradients are `(cols,)` arrays reduced
+over every row, but the first version wrote a per-row accumulator into
+a row-indexed position on a cols-sized array — a segfault the moment
+`rows != cols`), and then, after fixing that, the **exact same
+row-offset indexing mistake as bug #4**: cached forward activations
+were indexed as `cache[jj]` (column only), silently reading row 0 for
+every row instead of the correct row's data. Both fixed; all 5
+sequences now verified bit-exact-to-1e-3 against PyTorch:
+
+```
+Add-Sigmoid-Mul-ReLU   numpy dx diff=2.16e-07  compiled dx diff=1.19e-07  OK
+```
+
+After applying the same `-ffast-math -lmvec` fix already proven
+elsewhere in this project (the sequence includes `Sigmoid`), the
+compiled backward kernel is **5–6.9x faster** than naive numpy
+backward.
+
+### The fuzzer's grammar grows — and finds a NINTH real bug on the very mechanism it was built to stress-test
+
+`fuzz_test_v2.py` extends the random-graph generator with the two
+newer fusion mechanisms: diamond patterns and LayerNorm. Composing all
+three fusion passes together and running at scale found a real bug
+almost immediately — and it's the mirror image of bug #4, independently
+rediscovered in a *different* fusion pass written this session:
+
+**Bug #9:** `fuse_add_layernorm` fused `Add(x, bias)` into `AddLayerNorm`
+whenever an `Add` fed directly into a `LayerNorm`, without checking
+whether the second operand was a genuine full-tensor residual or just
+an ordinary `(cols,)` bias `Param`. `AddLayerNorm`'s kernel assumes
+both operands are full `(rows, cols)` tensors; handed a `(64,)` bias
+array for a `(29, 64)` input, it read past the end of the small array
+for every row past the first — silent `NaN` corruption, not a crash.
+Fixed the same way bug #4 was: require the second operand to
+originate from something other than a `Param` before treating it as a
+broadcast-eligible residual.
+
+The fix didn't just patch the two failing cases — it also revealed the
+fuzzer had **zero actual coverage of the `AddLayerNorm` fusion path
+itself** (only the standalone `LayerNorm` fallback), since the random
+grammar rarely produced the exact adjacency needed by chance. Added a
+dedicated `residual_layernorm` grammar rule to guarantee real coverage
+of the mechanism the bug lived in:
+
+```
+=== Fuzz v2 complete: 1000 random graphs ===
+Fused elementwise nodes: 217  diamonds: 843  AddLayerNorm/LayerNorm: 851
+NO FAILURES.
+```
+
+All three fusion mechanisms — elementwise chains, diamond subgraphs,
+and residual+LayerNorm — now genuinely exercised at scale, composed
+together, with zero failures. Conv2D/MaxPool remain out of the
+fuzzer's grammar (documented, honest scope: they need 4D spatial shape
+tracking this fuzzer's model doesn't yet support).
+
 ## What I'd build next
 
-- **Grow the fuzzer's grammar** — deeper graphs, Conv2D/MaxPool nodes,
-  and LayerNorm/attention patterns, to stress-test the reduction-based
-  fusion passes with the same rigor now applied to elementwise fusion.
-- **Fuse the attention orchestration itself** — head-splitting
-  reshapes and the QKV projection are currently several separate numpy
-  calls; this is the identified, honest source of the remaining
-  full-layer gap vs. PyTorch.
-- **Subgraph fusion**, not just linear chains — fusing `Sigmoid(h) *
-  Tanh(h)` itself (two full-tensor elementwise inputs, not one
-  chain + one broadcast operand) is a real generalization this version
-  deliberately excludes for correctness reasons, documented above.
-- **Conv+bias+ReLU fusion** with channel-wise (row) broadcast kernels
-  — right now Conv2D's own ReLU doesn't get fused since it's a length-1
-  chain; extending the codegen to a row-broadcast mode would let it.
-- **A richer learned cost model** — more features (op-specific cost,
-  not just a binary transcendental flag) would fix the `Tanh` vs
-  `Sigmoid` misprediction directly.
-- **A general autodiff engine**, not just one hardcoded backward
-  pattern — the fused-backward piece here proves the concept works;
-  generalizing it to arbitrary fused chains (the same way `fusion2.py`
-  generalized forward fusion) is the natural next step toward an
-  actual training compiler.
+- **Understand PyTorch's internal attention fusion.** The disproven
+  orchestration hypothesis leaves the real gap open: profiling
+  PyTorch's own C++ implementation, not this project's Python side, is
+  the honest next step.
+- **Extend the fuzzer to Conv2D/MaxPool.** Needs 4D spatial shape
+  tracking the current fuzzer's model doesn't support — documented,
+  not yet built.
+- **Extend diamond fusion beyond depth-1** — deeper subgraphs, and
+  n-ary merges beyond two branches.
 - **Verify the Triton backend on real GPU hardware** and extend it
   beyond the single Add+ReLU pattern.
 - **Multi-node autotuning**: have the Go service dispatch measurement

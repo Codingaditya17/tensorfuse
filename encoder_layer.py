@@ -39,6 +39,18 @@ class TensorfuseEncoderLayer:
         self.ln2_kernel = LayerNormKernel(with_residual=True)
 
     def _self_attention(self, x):
+        # NOTE: an earlier version of this method routed through
+        # attention_orchestration.py's compiled QKV-split/heads-merge
+        # kernels, on the documented hypothesis that numpy's split+
+        # reshape+transpose was the source of the remaining PyTorch gap.
+        # Benchmarking that in isolation disproved it: np.split and
+        # .transpose() produce lazy VIEWS that never copy data at all
+        # until something downstream forces materialization -- so they
+        # were already near-free (~0.007ms), and the "fusion" kernel,
+        # which eagerly copies into new contiguous buffers, was 100-400x
+        # SLOWER for exactly that reason. Reverted; see
+        # attention_orchestration.py's module docstring and profile_attention.py
+        # for the actual (different) source of the gap.
         b, s, d = x.shape
         w = self.w
         qkv = x @ w["in_proj_weight"].T + w["in_proj_bias"]
