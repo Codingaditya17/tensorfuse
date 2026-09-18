@@ -43,7 +43,7 @@ h2 { font-size: 1.3rem; margin-top: 56px; border-bottom: 1px solid var(--border)
 .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin: 24px 0; }
 .stat { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; }
 .stat .num { font-size: 1.5rem; font-weight: 700; color: var(--accent); }
-.stat .label { color: var(--muted); font-size: 0.85rem; margin-top: 4px; }
+.stat .label { color: var(--muted); font-size: 0.85rem; margin-top: 4px; overflow-wrap: anywhere; word-break: break-word; }
 img { max-width: 100%; border-radius: 8px; border: 1px solid var(--border); margin: 16px 0; display: block; }
 table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 0.92rem; }
 th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); }
@@ -68,7 +68,7 @@ footer { margin-top: 64px; color: var(--muted); font-size: 0.85rem; border-top: 
 <div class="subtitle">A tensor compiler built from scratch: fusion pass, autotuning, ONNX + PyTorch validation, a real transformer block, a networked tuning cache, and a fuzz-tested correctness suite.</div>
 
 <div class="stats">
-  <div class="stat"><div class="num">1.19e-6</div><div class="label">diff vs real torch.nn.TransformerEncoderLayer</div></div>
+  <div class="stat"><div class="num">1.19e-6</div><div class="label">diff vs real PyTorch TransformerEncoderLayer</div></div>
   <div class="stat"><div class="num">3.4x</div><div class="label">peak fusion speedup (isolated Add+ReLU)</div></div>
   <div class="stat"><div class="num">99.3%</div><div class="label">within torch.compile at 4096x4096</div></div>
   <div class="stat"><div class="num">100%</div><div class="label">learned cost model, held-out sequences (v2, fixed)</div></div>
