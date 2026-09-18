@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  python-tests:
+    name: Python correctness suite
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install system deps (gcc for compiled kernels)
+        run: sudo apt-get update && sudo apt-get install -y gcc
+
+      - name: Install Python deps
+        run: pip install -r requirements.txt
+
+      - name: v1 correctness (fixed bias+ReLU fusion pattern)
+        run: python3 test_correctness.py
+
+      - name: v2 correctness (generalized fusion, autotuning, cost models)
+        run: python3 test_correctness_v2.py
+
+      - name: Transformer FFN block vs real PyTorch
+        run: python3 transformer_block.py
+
+      - name: Fused backward kernel vs real PyTorch autograd
+        run: python3 backward_fusion.py
+
+      - name: Attention softmax kernel correctness + stability
+        run: python3 ir_attention.py
+
+      - name: Full transformer encoder layer vs torch.nn.TransformerEncoderLayer
+        run: python3 encoder_layer.py
+
+      - name: Compiler correctness fuzzer (300 random graphs)
+        run: python3 fuzz_test.py 300
+
+  go-service:
+    name: Go tuning cache service builds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - name: Build
+        working-directory: tuning_cache_service
+        run: go build -o tuning_cache_service .
+
+      - name: Smoke test (start, hit /health, stop)
+        working-directory: tuning_cache_service
+        run: |
+          ./tuning_cache_service &
+          SERVER_PID=$!
+          sleep 1
+          curl -sf http://localhost:8787/health
+          kill $SERVER_PID

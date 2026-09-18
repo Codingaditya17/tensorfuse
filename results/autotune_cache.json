@@ -1,0 +1,443 @@
+{
+  "Add-ReLU|cols=16": {
+    "backend": "scalar",
+    "unroll": 8,
+    "time_ms": 0.0048350000270147575,
+    "all_candidates": [
+      {
+        "backend": "scalar",
+        "unroll": 1,
+        "status": "ok",
+        "max_diff": 0.0,
+        "time_ms": 0.005058999931861763
+      },
+      {
+        "backend": "scalar",
+        "unroll": 2,
+        "status": "ok",
+        "max_diff": 0.0,
+        "time_ms": 0.005534000024454144
+      },
+      {
+        "backend": "scalar",
+        "unroll": 4,
+        "status": "ok",
+        "max_diff": 0.0,
+        "time_ms": 0.004964999902767886
+      },
+      {
+        "backend": "scalar",
+        "unroll": 8,
+        "status": "ok",
+        "max_diff": 0.0,
+        "time_ms": 0.0048350000270147575
+      },
+      {
+        "backend": "scalar",
+        "unroll": 16,
+        "status": "ok",
+        "max_diff": 0.0,
+        "time_ms": 0.004849999982070585
+      },
+      {
+        "backend": "avx512",
+        "unroll": 1,
+        "status": "ok",
+        "max_diff": 0.0,
+        "time_ms": 0.006019000011292519
+      },
+      {
+        "backend": "avx512",
+        "unroll": 2,
+        "status": "ok",
+        "max_diff": 0.0,
+        "time_ms": 0.00835499997720035
+      },
+      {
+        "backend": "avx512",
+        "unroll": 4,
+        "status": "ok",
+        "max_diff": 0.0,
+        "time_ms": 0.005153999950380239
+      }
+    ]
+  },
+  "Add-Sigmoid-Mul-ReLU|cols=4": {
+    "backend": "scalar",
+    "unroll": 8,
+    "time_ms": 0.0069889999849692686,
+    "all_candidates": [
+      {
+        "backend": "scalar",
+        "unroll": 1,
+        "status": "ok",
+        "max_diff": 0.0,
+        "time_ms": 0.007697000000916887
+      },
+      {
+        "backend": "scalar",
+        "unroll": 2,
+        "status": "ok",
+        "max_diff": 0.0,
+        "time_ms": 0.007514000003538968
+      },
+      {
+        "backend": "scalar",
+        "unroll": 4,
+        "status": "ok",
+        "max_diff": 0.0,
+        "time_ms": 0.007127000003492867
+      },
+      {
+        "backend": "scalar",
+        "unroll": 8,
+        "status": "ok",
+        "max_diff": 0.0,
+        "time_ms": 0.0069889999849692686
+      },
+      {
+        "backend": "scalar",
+        "unroll": 16,
+        "status": "ok",
+        "max_diff": 0.0,
+        "time_ms": 0.007008000011410331
+      }
+    ]
+  },
+  "Add-ReLU|cols=64": {
+    "backend": "scalar",
+    "unroll": 8,
+    "time_ms": 0.005102000045553723,
+    "all_candidates": [
+      {
+        "backend": "scalar",
+        "unroll": 1,
+        "status": "ok",
+        "max_diff": 0.0,
+        "time_ms": 0.005188000045563967
+      },
+      {
+        "backend": "scalar",
+        "unroll": 2,
+        "status": "ok",
+        "max_diff": 0.0,
+        "time_ms": 0.005428000008578238
+      },
+      {
+        "backend": "scalar",
+        "unroll": 4,
+        "status": "ok",
+        "max_diff": 0.0,
+        "time_ms": 0.005301999976836669
+      },
+      {
+        "backend": "scalar",
+        "unroll": 8,
+        "status": "ok",
+        "max_diff": 0.0,
+        "time_ms": 0.005102000045553723
+      },
+      {
+        "backend": "scalar",
+        "unroll": 16,
+        "status": "ok",
+        "max_diff": 0.0,
+        "time_ms": 0.005613999974229955
+      },
+      {
+        "backend": "avx512",
+        "unroll": 1,
+        "status": "ok",
+        "max_diff": 0.0,
+        "time_ms": 0.006461999987550371
+      },
+      {
+        "backend": "avx512",
+        "unroll": 2,
+        "status": "ok",
+        "max_diff": 0.0,
+        "time_ms": 0.0068660000351883355
+      },
+      {
+        "backend": "avx512",
+        "unroll": 4,
+        "status": "ok",
+        "max_diff": 0.0,
+        "time_ms": 0.005843000053573633
+      }
+    ]
+  },
+  "Add-Sigmoid-Mul-ReLU|cols=16": {
+    "backend": "scalar",
+    "unroll": 16,
+    "time_ms": 0.007566000022052322,
+    "all_candidates": [
+      {
+        "backend": "scalar",
+        "unroll": 1,
+        "status": "ok",
+        "max_diff": 1.4901161193847656e-08,
+        "time_ms": 0.008881999974619248
+      },
+      {
+        "backend": "scalar",
+        "unroll": 2,
+        "status": "ok",
+        "max_diff": 1.4901161193847656e-08,
+        "time_ms": 0.008039000022108667
+      },
+      {
+        "backend": "scalar",
+        "unroll": 4,
+        "status": "ok",
+        "max_diff": 1.4901161193847656e-08,
+        "time_ms": 0.007860999971853744
+      },
+      {
+        "backend": "scalar",
+        "unroll": 8,
+        "status": "ok",
+        "max_diff": 1.4901161193847656e-08,
+        "time_ms": 0.008873000069797854
+      },
+      {
+        "backend": "scalar",
+        "unroll": 16,
+        "status": "ok",
+        "max_diff": 1.4901161193847656e-08,
+        "time_ms": 0.007566000022052322
+      }
+    ]
+  },
+  "Add-ReLU|cols=1024": {
+    "backend": "scalar",
+    "unroll": 4,
+    "time_ms": 0.17321399997172193,
+    "all_candidates": [
+      {
+        "backend": "scalar",
+        "unroll": 1,
+        "status": "ok",
+        "max_diff": 0.0,
+        "time_ms": 0.18369200000734054
+      },
+      {
+        "backend": "scalar",
+        "unroll": 2,
+        "status": "ok",
+        "max_diff": 0.0,
+        "time_ms": 0.18006499999501102
+      },
+      {
+        "backend": "scalar",
+        "unroll": 4,
+        "status": "ok",
+        "max_diff": 0.0,
+        "time_ms": 0.17321399997172193
+      },
+      {
+        "backend": "scalar",
+        "unroll": 8,
+        "status": "ok",
+        "max_diff": 0.0,
+        "time_ms": 0.18836300000657502
+      },
+      {
+        "backend": "scalar",
+        "unroll": 16,
+        "status": "ok",
+        "max_diff": 0.0,
+        "time_ms": 0.17606300002626085
+      }
+    ]
+  },
+  "Add-Sigmoid-Mul-ReLU|cols=256": {
+    "backend": "scalar",
+    "unroll": 8,
+    "time_ms": 0.31360000002678134,
+    "all_candidates": [
+      {
+        "backend": "scalar",
+        "unroll": 1,
+        "status": "ok",
+        "max_diff": 2.384185791015625e-07,
+        "time_ms": 0.31846799993218156
+      },
+      {
+        "backend": "scalar",
+        "unroll": 2,
+        "status": "ok",
+        "max_diff": 2.384185791015625e-07,
+        "time_ms": 0.31504899993706204
+      },
+      {
+        "backend": "scalar",
+        "unroll": 4,
+        "status": "ok",
+        "max_diff": 2.384185791015625e-07,
+        "time_ms": 0.3156630000376026
+      },
+      {
+        "backend": "scalar",
+        "unroll": 8,
+        "status": "ok",
+        "max_diff": 2.384185791015625e-07,
+        "time_ms": 0.31360000002678134
+      },
+      {
+        "backend": "scalar",
+        "unroll": 16,
+        "status": "ok",
+        "max_diff": 2.384185791015625e-07,
+        "time_ms": 0.31519000003754627
+      }
+    ]
+  },
+  "Add-ReLU|cols=50": {
+    "backend": "scalar",
+    "unroll": 2,
+    "time_ms": 0.005126000019117782,
+    "all_candidates": [
+      {
+        "backend": "scalar",
+        "unroll": 1,
+        "status": "ok",
+        "max_diff": 0.0,
+        "time_ms": 0.005246999990049517
+      },
+      {
+        "backend": "scalar",
+        "unroll": 2,
+        "status": "ok",
+        "max_diff": 0.0,
+        "time_ms": 0.005126000019117782
+      },
+      {
+        "backend": "scalar",
+        "unroll": 4,
+        "status": "ok",
+        "max_diff": 0.0,
+        "time_ms": 0.005711999961022229
+      },
+      {
+        "backend": "scalar",
+        "unroll": 8,
+        "status": "ok",
+        "max_diff": 0.0,
+        "time_ms": 0.006330000019261206
+      },
+      {
+        "backend": "scalar",
+        "unroll": 16,
+        "status": "ok",
+        "max_diff": 0.0,
+        "time_ms": 0.005582999961006863
+      },
+      {
+        "backend": "avx512",
+        "unroll": 1,
+        "status": "ok",
+        "max_diff": 0.0,
+        "time_ms": 0.007001999961175898
+      },
+      {
+        "backend": "avx512",
+        "unroll": 2,
+        "status": "ok",
+        "max_diff": 0.0,
+        "time_ms": 0.005347999945115589
+      },
+      {
+        "backend": "avx512",
+        "unroll": 4,
+        "status": "ok",
+        "max_diff": 0.0,
+        "time_ms": 0.0058230000377079705
+      }
+    ]
+  },
+  "Add-Sigmoid-Mul-ReLU|cols=13": {
+    "backend": "scalar",
+    "unroll": 4,
+    "time_ms": 0.009045000069818343,
+    "all_candidates": [
+      {
+        "backend": "scalar",
+        "unroll": 1,
+        "status": "ok",
+        "max_diff": 1.1920928955078125e-07,
+        "time_ms": 0.009393000027557719
+      },
+      {
+        "backend": "scalar",
+        "unroll": 2,
+        "status": "ok",
+        "max_diff": 1.1920928955078125e-07,
+        "time_ms": 0.009560999956192973
+      },
+      {
+        "backend": "scalar",
+        "unroll": 4,
+        "status": "ok",
+        "max_diff": 1.1920928955078125e-07,
+        "time_ms": 0.009045000069818343
+      },
+      {
+        "backend": "scalar",
+        "unroll": 8,
+        "status": "ok",
+        "max_diff": 1.1920928955078125e-07,
+        "time_ms": 0.011209000035705685
+      },
+      {
+        "backend": "scalar",
+        "unroll": 16,
+        "status": "ok",
+        "max_diff": 1.1920928955078125e-07,
+        "time_ms": 0.009603999956198095
+      }
+    ]
+  },
+  "Add-Sigmoid|cols=1": {
+    "backend": "scalar",
+    "unroll": 8,
+    "time_ms": 0.004905999958282337,
+    "all_candidates": [
+      {
+        "backend": "scalar",
+        "unroll": 1,
+        "status": "ok",
+        "max_diff": 5.960464477539063e-08,
+        "time_ms": 0.005218999945100222
+      },
+      {
+        "backend": "scalar",
+        "unroll": 2,
+        "status": "ok",
+        "max_diff": 5.960464477539063e-08,
+        "time_ms": 0.005073000011179829
+      },
+      {
+        "backend": "scalar",
+        "unroll": 4,
+        "status": "ok",
+        "max_diff": 5.960464477539063e-08,
+        "time_ms": 0.005267999995339778
+      },
+      {
+        "backend": "scalar",
+        "unroll": 8,
+        "status": "ok",
+        "max_diff": 5.960464477539063e-08,
+        "time_ms": 0.004905999958282337
+      },
+      {
+        "backend": "scalar",
+        "unroll": 16,
+        "status": "ok",
+        "max_diff": 5.960464477539063e-08,
+        "time_ms": 0.005011999974158243
+      }
+    ]
+  }
+}
